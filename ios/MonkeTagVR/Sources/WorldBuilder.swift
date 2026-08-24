@@ -1,6 +1,7 @@
 import Foundation
 import SceneKit
 import ModelIO
+import SceneKit.ModelIO
 import UIKit
 import GLTFKit2
 
