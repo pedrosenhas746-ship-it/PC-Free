@@ -1,0 +1,89 @@
+name: CHAOS VR iPhone IPA
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-ipa:
+    name: Build CHAOS VR IPA
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode environment
+        run: |
+          set -euxo pipefail
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          swift --version
+
+      - name: Install XcodeGen
+        run: |
+          set -euxo pipefail
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+          xcodegen --version
+
+      - name: Generate Xcode project
+        run: |
+          set -euxo pipefail
+          cd chaosvr-ios
+          xcodegen generate
+          test -f ChaosVR.xcodeproj/project.pbxproj
+
+      - name: Build arm64 iPhone app
+        run: |
+          set -euxo pipefail
+          cd chaosvr-ios
+          xcodebuild \
+            -project ChaosVR.xcodeproj \
+            -scheme ChaosVR \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$GITHUB_WORKSPACE/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' \
+            DEVELOPMENT_TEAM='' \
+            ONLY_ACTIVE_ARCH=NO \
+            ARCHS=arm64 \
+            build | tee "$GITHUB_WORKSPACE/xcodebuild.log"
+
+      - name: Package real IPA
+        run: |
+          set -euxo pipefail
+          APP=$(find DerivedData/Build/Products/Release-iphoneos -maxdepth 1 -type d -name '*.app' | head -1)
+          test -n "$APP"
+          test -f "$APP/Info.plist"
+          mkdir -p Payload
+          cp -R "$APP" Payload/CHAOSVR.app
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' Payload/CHAOSVR.app/Info.plist | tee bundle-id.txt
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' Payload/CHAOSVR.app/Info.plist | tee executable.txt
+          test -f "Payload/CHAOSVR.app/$(cat executable.txt)"
+          ditto -c -k --sequesterRsrc --keepParent Payload CHAOSVR-iPhone-UNSIGNED.ipa
+          shasum -a 256 CHAOSVR-iPhone-UNSIGNED.ipa | tee CHAOSVR-iPhone-UNSIGNED.sha256
+          unzip -t CHAOSVR-iPhone-UNSIGNED.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: CHAOSVR-iPhone-IPA-${{ github.run_number }}
+          path: |
+            CHAOSVR-iPhone-UNSIGNED.ipa
+            CHAOSVR-iPhone-UNSIGNED.sha256
+            bundle-id.txt
+            executable.txt
+            xcodebuild.log
+          if-no-files-found: error
+          retention-days: 14
