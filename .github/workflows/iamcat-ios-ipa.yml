@@ -52,17 +52,17 @@ jobs:
           set -euo pipefail
           APP="build/Build/Products/Release-iphoneos/IAmCatVR.app"
           test -d "$APP"
-          rm -rf Payload IAmCatVR-v0.2-unsigned.ipa
+          rm -rf Payload IAmCatVR-v0.3-stage1-unsigned.ipa
           mkdir Payload
           cp -R "$APP" Payload/
-          zip -qry IAmCatVR-v0.2-unsigned.ipa Payload
-          shasum -a 256 IAmCatVR-v0.2-unsigned.ipa | tee IAmCatVR-v0.2-unsigned.sha256
+          zip -qry IAmCatVR-v0.3-stage1-unsigned.ipa Payload
+          shasum -a 256 IAmCatVR-v0.3-stage1-unsigned.ipa | tee IAmCatVR-v0.3-stage1-unsigned.sha256
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: IAmCatVR-iOS-IPA
+          name: IAmCatVR-v0.3-Stage1
           path: |
-            ios/IAmCatVR/IAmCatVR-v0.2-unsigned.ipa
-            ios/IAmCatVR/IAmCatVR-v0.2-unsigned.sha256
+            ios/IAmCatVR/IAmCatVR-v0.3-stage1-unsigned.ipa
+            ios/IAmCatVR/IAmCatVR-v0.3-stage1-unsigned.sha256
           if-no-files-found: error
