@@ -1,31 +1,46 @@
 import UIKit
 import ARKit
 import Vision
+import SceneKit
 
 final class VRViewController: UIViewController, ARSessionDelegate {
     private let session = ARSession()
     private let handTracker = HandTrackingEngine()
-    private let leftLabel = UILabel()
-    private let rightLabel = UILabel()
+    private let world = GameWorld()
+
+    private let leftView = SCNView()
+    private let rightView = SCNView()
+    private let leftHUD = UILabel()
+    private let rightHUD = UILabel()
     private let statusLabel = UILabel()
-    private let portLabel = UILabel()
+    private let campaignLabel = UILabel()
+
     private var lastHands: [TrackedHandState] = []
 
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
-        setupUI()
+        setupStereoViews()
+        setupHUD()
         session.delegate = self
+
+        world.onProgressChanged = { [weak self] text in
+            DispatchQueue.main.async {
+                self?.campaignLabel.text = text
+            }
+        }
     }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         guard ARWorldTrackingConfiguration.isSupported else {
-            statusLabel.text = "ARKit 6DoF unavailable on this device"
+            statusLabel.text = "ARKit 6DoF unavailable"
             return
         }
+
         let config = ARWorldTrackingConfiguration()
         config.worldAlignment = .gravity
+        config.isLightEstimationEnabled = true
         session.run(config, options: [.resetTracking, .removeExistingAnchors])
     }
 
@@ -34,68 +49,96 @@ final class VRViewController: UIViewController, ARSessionDelegate {
         session.pause()
     }
 
-    private func setupUI() {
-        func style(_ label: UILabel, size: CGFloat) {
+    private func setupStereoViews() {
+        for scnView in [leftView, rightView] {
+            scnView.scene = world.scene
+            scnView.backgroundColor = .black
+            scnView.isPlaying = true
+            scnView.preferredFramesPerSecond = 60
+            scnView.antialiasingMode = .multisampling2X
+            scnView.rendersContinuously = true
+            scnView.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview(scnView)
+        }
+
+        leftView.pointOfView = world.leftCameraNode
+        rightView.pointOfView = world.rightCameraNode
+
+        NSLayoutConstraint.activate([
+            leftView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            leftView.topAnchor.constraint(equalTo: view.topAnchor),
+            leftView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            leftView.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.5),
+
+            rightView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            rightView.topAnchor.constraint(equalTo: view.topAnchor),
+            rightView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            rightView.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.5)
+        ])
+    }
+
+    private func setupHUD() {
+        func configure(_ label: UILabel, size: CGFloat) {
             label.textColor = .white
-            label.font = .monospacedSystemFont(ofSize: size, weight: .medium)
-            label.numberOfLines = 0
+            label.font = .monospacedSystemFont(ofSize: size, weight: .semibold)
             label.textAlignment = .center
+            label.numberOfLines = 0
+            label.layer.shadowColor = UIColor.black.cgColor
+            label.layer.shadowOpacity = 0.9
+            label.layer.shadowRadius = 2
             label.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(label)
         }
 
-        style(leftLabel, size: 15)
-        style(rightLabel, size: 15)
-        style(statusLabel, size: 13)
-        style(portLabel, size: 11)
+        configure(leftHUD, size: 11)
+        configure(rightHUD, size: 11)
+        configure(statusLabel, size: 10)
+        configure(campaignLabel, size: 10)
 
-        leftLabel.text = "LEFT EYE\nWaiting for hand"
-        rightLabel.text = "RIGHT EYE\nWaiting for hand"
-        statusLabel.text = "Starting ARKit 6DoF…"
-        portLabel.text = "I Am Cat iOS Port Stage 1\n\(PortAssetManifest.sourceCoverageText)\nUnity source: \(PortAssetManifest.unityVersion)"
+        leftHUD.text = "LEFT PAW — OPEN"
+        rightHUD.text = "RIGHT PAW — OPEN"
+        statusLabel.text = "Starting 6DoF…"
+        campaignLabel.text = world.progressText
 
         let divider = UIView()
-        divider.backgroundColor = UIColor.white.withAlphaComponent(0.18)
+        divider.backgroundColor = UIColor.white.withAlphaComponent(0.22)
         divider.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(divider)
 
         NSLayoutConstraint.activate([
-            leftLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            leftLabel.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.5),
-            leftLabel.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            leftHUD.centerXAnchor.constraint(equalTo: leftView.centerXAnchor),
+            leftHUD.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -10),
+            leftHUD.widthAnchor.constraint(equalTo: leftView.widthAnchor, multiplier: 0.82),
 
-            rightLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            rightLabel.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.5),
-            rightLabel.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            rightHUD.centerXAnchor.constraint(equalTo: rightView.centerXAnchor),
+            rightHUD.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -10),
+            rightHUD.widthAnchor.constraint(equalTo: rightView.widthAnchor, multiplier: 0.82),
+
+            campaignLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            campaignLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
+
+            statusLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            statusLabel.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -30),
 
             divider.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             divider.topAnchor.constraint(equalTo: view.topAnchor),
             divider.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            divider.widthAnchor.constraint(equalToConstant: 1),
-
-            portLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            portLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 10),
-
-            statusLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            statusLabel.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -12)
+            divider.widthAnchor.constraint(equalToConstant: 1)
         ])
     }
 
     func session(_ session: ARSession, didUpdate frame: ARFrame) {
-        let camera = frame.camera
-        let p = camera.transform.columns.3
-        let tracking: String
-        switch camera.trackingState {
-        case .normal: tracking = "TRACKING"
-        case .notAvailable: tracking = "NO TRACKING"
-        case .limited: tracking = "LIMITED"
-        @unknown default: tracking = "UNKNOWN"
-        }
+        let transform = frame.camera.transform
+        let p = transform.columns.3
 
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.world.updateHead(transform)
             self.statusLabel.text = String(
-                format: "%@  6DoF  x %.2f  y %.2f  z %.2f  | hands %d",
-                tracking, p.x, p.y, p.z, self.lastHands.count
+                format: "%@  x %.2f y %.2f z %.2f | hands %d",
+                self.trackingText(frame.camera.trackingState),
+                p.x, p.y, p.z,
+                self.lastHands.count
             )
         }
 
@@ -103,29 +146,41 @@ final class VRViewController: UIViewController, ARSessionDelegate {
             guard let self else { return }
             self.lastHands = hands
             DispatchQueue.main.async {
-                self.renderHands(hands)
+                self.world.updateHands(hands)
+                self.renderHandHUD(hands)
             }
         }
     }
 
-    private func renderHands(_ hands: [TrackedHandState]) {
-        func text(for hand: TrackedHandState?, eye: String) -> String {
-            guard let hand else { return "\(eye)\nNo hand" }
-            let grab = hand.pinch > 0.62 ? "GRAB" : "OPEN"
-            return String(
-                format: "%@\nHand %.0f%%\nPinch %.0f%%  %@\nWrist %.2f, %.2f",
-                eye,
-                hand.confidence * 100,
-                hand.pinch * 100,
-                grab,
-                hand.wristX,
-                hand.wristY
-            )
+    private func trackingText(_ state: ARCamera.TrackingState) -> String {
+        switch state {
+        case .normal:
+            return "6DOF OK"
+        case .notAvailable:
+            return "NO TRACKING"
+        case .limited(let reason):
+            switch reason {
+            case .initializing: return "INITIALIZING"
+            case .excessiveMotion: return "MOVE SLOWER"
+            case .insufficientFeatures: return "NEED MORE LIGHT"
+            case .relocalizing: return "RELOCALIZING"
+            @unknown default: return "LIMITED"
+            }
         }
+    }
 
+    private func renderHandHUD(_ hands: [TrackedHandState]) {
         let left = hands.indices.contains(0) ? hands[0] : nil
         let right = hands.indices.contains(1) ? hands[1] : nil
-        leftLabel.text = text(for: left, eye: "LEFT EYE")
-        rightLabel.text = text(for: right, eye: "RIGHT EYE")
+
+        func labelText(_ hand: TrackedHandState?, name: String) -> String {
+            guard let hand else { return "\(name) — NOT SEEN" }
+            let state = hand.pinch > 0.66 ? "GRAB" : "OPEN"
+            return String(format: "%@ — %@ — pinch %.0f%%", name, state, hand.pinch * 100)
+        }
+
+        leftHUD.text = labelText(left, name: "LEFT PAW")
+        rightHUD.text = labelText(right, name: "RIGHT PAW")
+        campaignLabel.text = world.progressText
     }
 }
