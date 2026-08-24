@@ -56,11 +56,11 @@ final class WorldBuilder {
         let asset = MDLAsset(url: objURL)
         asset.loadTextures()
         guard asset.count > 0 else { return false }
+        let importedScene = SCNScene(mdlAsset: asset)
         let mapRoot = SCNNode()
         mapRoot.name = "GorillaTagMap_REAL"
-        for i in 0..<asset.count {
-            let object = asset.object(at: i)
-            mapRoot.addChildNode(SCNNode(mdlObject: object))
+        for child in importedScene.rootNode.childNodes {
+            mapRoot.addChildNode(child.clone())
         }
         mapRoot.enumerateChildNodes { node, _ in
             node.categoryBitMask = 1
@@ -141,8 +141,7 @@ final class WorldBuilder {
     }
 
     private func normalizedBox(for node: SCNNode) -> (min: SCNVector3, max: SCNVector3)? {
-        var min = SCNVector3Zero, max = SCNVector3Zero
-        return node.getBoundingBoxMin(&min, max: &max) ? (min, max) : nil
+        return node.boundingBox
     }
 
     func makeFallbackGorilla(hue: Float) -> SCNNode {
