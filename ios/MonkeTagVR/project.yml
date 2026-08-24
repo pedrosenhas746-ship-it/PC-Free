@@ -1,0 +1,39 @@
+name: MonkeTagVR
+options:
+  bundleIdPrefix: com.pedrovr
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    SWIFT_VERSION: 5.0
+    IPHONEOS_DEPLOYMENT_TARGET: 16.0
+    TARGETED_DEVICE_FAMILY: "1"
+targets:
+  MonkeTagVR:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.pedrovr.monketagvr
+        PRODUCT_NAME: MonkeTagVR
+        INFOPLIST_FILE: Info.plist
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_BITCODE: NO
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: MonkeTag VR
+        CFBundleShortVersionString: "0.2"
+        CFBundleVersion: "2"
+        UILaunchScreen: {}
+        UIRequiresFullScreen: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIViewControllerBasedStatusBarAppearance: false
+        UIStatusBarHidden: true
+        NSCameraUsageDescription: "A câmera é usada para rastrear as mãos no VRBox."
+        NSMotionUsageDescription: "Os sensores de movimento orientam a cabeça no modo VR."
+        NSLocalNetworkUsageDescription: "O multiplayer sincroniza os jogadores online."
