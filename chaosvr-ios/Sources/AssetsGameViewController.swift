@@ -83,7 +83,7 @@ final class AssetsGameViewController: UIViewController, ARSessionDelegate, SCNPh
         }
         let p = worldPoint(t,forward:0.85,down:0.30,right:0.38)
         if let g = MeshPacketLoader.node(resource:"TommyGun",color:UIColor(red:0.18,green:0.16,blue:0.13,alpha:1),staticBody:false,category:PhysicsCategory.grabbable){
-            g.name = "Grab_TommyGun"; g.position = p; g.scale = SCNVector3(0.78,0.78,0.78); g.eulerAngles = SCNVector3(0,.pi/2,0); g.physicsBody?.mass = 3.6; sceneView.scene.rootNode.addChildNode(g); grabbables.append(g); gun = g
+            g.name = "Grab_TommyGun"; g.position = p; g.scale = SCNVector3(0.78,0.78,0.78); g.eulerAngles = SCNVector3(0, Float.pi / 2, 0); g.physicsBody?.mass = 3.6; sceneView.scene.rootNode.addChildNode(g); grabbables.append(g); gun = g
         }
         spawnNPC()
         hud.text = "CHAOS VR v0.3 • GHOST CITY carregada\nMostre as mãos • pinch para pegar a Tommy"
