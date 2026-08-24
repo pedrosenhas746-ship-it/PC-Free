@@ -10,8 +10,7 @@ final class MeshPacketLoader {
               let raw = inflate(compressed), raw.count > 36,
               String(data: raw.prefix(4), encoding: .ascii) == "CMH2" else { return nil }
 
-        var o
- = 4
+        var o = 4
         func u16() -> UInt16 {
             guard o + 2 <= raw.count else { return 0 }
             let v = UInt16(raw[o]) | (UInt16(raw[o + 1]) << 8)
@@ -56,7 +55,7 @@ final class MeshPacketLoader {
         mat.diffuse.contents = color
         mat.lightingModel = .physicallyBased
         mat.roughness.contents = resource.contains("Tommy") ? 0.34 : 0.76
-        mat.metallness.contents = resource.contains("Tommy") ? 0.58 : 0.05
+        mat.metalness.contents = resource.contains("Tommy") ? 0.58 : 0.05
         mat.isDoubleSided = true
         geo.materials = [mat]
 
@@ -64,12 +63,18 @@ final class MeshPacketLoader {
         if staticBody {
             let shape = SCNPhysicsShape(geometry: geo, options: [.type: SCNPhysicsShape.ShapeType.concavePolyhedron])
             let body = SCNPhysicsBody(type: .static, shape: shape)
-            body.categoryBitMask = category; body.collisionBitMask = ~0; node.physicsBody = body
+            body.categoryBitMask = category
+            body.collisionBitMask = ~0
+            node.physicsBody = body
         } else {
             let shape = SCNPhysicsShape(geometry: geo, options: [.type: SCNPhysicsShape.ShapeType.convexHull])
             let body = SCNPhysicsBody(type: .dynamic, shape: shape)
-            body.mass = 3.8; body.categoryBitMask = category; body.collisionBitMask = ~0
-            body.contactTestBitMask = PhysicsCategory.npc; body.friction = 0.75; body.angularDamping = 0.2
+            body.mass = 3.8
+            body.categoryBitMask = category
+            body.collisionBitMask = ~0
+            body.contactTestBitMask = PhysicsCategory.npc
+            body.friction = 0.75
+            body.angularDamping = 0.2
             node.physicsBody = body
         }
         return node
@@ -77,7 +82,7 @@ final class MeshPacketLoader {
 
     private static func inflate(_ data: Data) -> Data? {
         var size = max(data.count * 8, 65_536)
-      while size <= 8_000_000 {
+        while size <= 8_000_000 {
             var out = Data(count: size)
             let decoded = out.withUnsafeMutableBytes { dst in
                 data.withUnsafeBytes { src in
@@ -86,7 +91,10 @@ final class MeshPacketLoader {
                     return compression_decode_buffer(d, size, s, data.count, nil, COMPRESSION_ZLIB)
                 }
             }
-            if decoded > 0 { out.count = decoded; return out }
+            if decoded > 0 {
+                out.count = decoded
+                return out
+            }
             size *= 2
         }
         return nil
