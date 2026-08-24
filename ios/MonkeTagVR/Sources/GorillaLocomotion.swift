@@ -24,11 +24,14 @@ final class GorillaLocomotion {
     private var lastTime: TimeInterval = 0
 
     init(scene: SCNScene) {
-        rigRoot = SCNNode(); rigRoot.position = SCNVector3(0, 1.55, 3.2)
-        head = SCNNode(); rigRoot.addChildNode(head)
+        rigRoot = SCNNode()
+        rigRoot.position = WorldBuilder.shared.spawnPosition
+        rigRoot.categoryBitMask = 2
+        head = SCNNode(); head.categoryBitMask = 2; rigRoot.addChildNode(head)
         leftHand = SCNNode(geometry: SCNSphere(radius: 0.075)); rightHand = SCNNode(geometry: SCNSphere(radius: 0.075))
         leftHand.geometry?.firstMaterial?.diffuse.contents = UIColor.white
         rightHand.geometry?.firstMaterial?.diffuse.contents = UIColor.white
+        leftHand.categoryBitMask = 2; rightHand.categoryBitMask = 2
         scene.rootNode.addChildNode(rigRoot); scene.rootNode.addChildNode(leftHand); scene.rootNode.addChildNode(rightHand)
         lastLeftWorld = worldDesired(desiredLeft); lastRightWorld = worldDesired(desiredRight)
     }
@@ -52,7 +55,6 @@ final class GorillaLocomotion {
             move = move / count; rigRoot.position = rigRoot.position + move
         } else {
             bodyVelocity.y -= 9.8 * dt; rigRoot.position = rigRoot.position + bodyVelocity * dt
-            if rigRoot.position.y < 1.25 { rigRoot.position.y = 1.25; bodyVelocity.y = max(0, bodyVelocity.y) }
         }
 
         leftHand.position = leftDesiredWorld; rightHand.position = rightDesiredWorld
@@ -79,6 +81,12 @@ final class GorillaLocomotion {
 
     private func rayHit(scene: SCNScene, from: SCNVector3, to: SCNVector3) -> SCNVector3? {
         guard (to - from).length > 0.001 else { return nil }
-        return scene.physicsWorld.rayTestWithSegment(from: from, to: to, options: [.searchMode: SCNPhysicsWorld.TestSearchMode.closest, .backfaceCulling: false]).first?.worldCoordinates
+        let options: [SCNHitTestOption: Any] = [
+            .searchMode: SCNHitTestSearchMode.closest.rawValue,
+            .backFaceCulling: false,
+            .categoryBitMask: 1,
+            .ignoreHiddenNodes: true
+        ]
+        return scene.rootNode.hitTestWithSegment(from: from, to: to, options: options).first?.worldCoordinates
     }
 }
