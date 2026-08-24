@@ -104,7 +104,7 @@ final class AssetsGameViewController: UIViewController, ARSessionDelegate, SCNPh
         let hits = sceneView.scene.physicsWorld.rayTestWithSegment(from:start,to:end,options:[.searchMode:SCNPhysicsWorld.TestSearchMode.closest])
         if let h = hits.first, let body = h.node.physicsBody, body.type == .dynamic { body.applyForce(SCNVector3(f.x*18,f.y*18+1,f.z*18),at:h.worldCoordinates,asImpulse:true) }
         g.physicsBody?.applyForce(SCNVector3(-f.x*0.45,-f.y*0.45,-f.z*0.45),asImpulse:true)
-        muzzle(at:start,direction:f); shots + = 1; hud.text = "CHAOS VR v0.3 • GHOST CITY\nTOMMY • tiros: \(shots)"
+        muzzle(at:start,direction:f); shots += 1; hud.text = "CHAOS VR v0.3 • GHOST CITY\nTOMMY • tiros: \(shots)"
     }
 
     private func muzzle(at p:SCNVector3,direction:SIMD3<Float>){ let s = SCNSphere(radius:0.035);s.firstMaterial?.emission.contents = UIColor.orange;s.firstMaterial?.diffuse.contents = UIColor.yellow;let n = SCNNode(geometry:s);n.position = SCNVector3(p.x+direction.x*0.35,p.y+direction.y*0.35,p.z+direction.z*0.35);sceneView.scene.rootNode.addChildNode(n);n.runAction(.sequence([.fadeOut(duration:0.08),.removeFromParentNode()])) }
