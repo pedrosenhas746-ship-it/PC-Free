@@ -13,13 +13,15 @@ targets:
     deploymentTarget: "16.0"
     sources:
       - Sources
+    resources:
+      - Resources
     info:
       path: Info.plist
       properties:
         CFBundleDisplayName: CHAOS VR
         CFBundleName: CHAOS VR
-        CFBundleShortVersionString: "0.2"
-        CFBundleVersion: "2"
+        CFBundleShortVersionString: "0.3"
+        CFBundleVersion: "3"
         NSCameraUsageDescription: "CHAOS VR uses the rear camera for mixed reality, head tracking and experimental hand tracking."
         UIRequiredDeviceCapabilities:
           - arm64
@@ -39,3 +41,4 @@ targets:
       - sdk: SceneKit.framework
       - sdk: Vision.framework
       - sdk: UIKit.framework
+      - sdk: Compression.framework
