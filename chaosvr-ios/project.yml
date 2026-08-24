@@ -41,4 +41,3 @@ targets:
       - sdk: SceneKit.framework
       - sdk: Vision.framework
       - sdk: UIKit.framework
-      - sdk: Compression.framework
