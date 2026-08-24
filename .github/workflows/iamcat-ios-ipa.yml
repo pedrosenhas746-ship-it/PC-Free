@@ -23,7 +23,13 @@ jobs:
 
       - name: Generate Xcode project
         working-directory: ios/IAmCatVR
-        run: xcodegen generate
+        run: |
+          set -euo pipefail
+          xcodegen generate
+          PBX="IAmCatVR.xcodeproj/project.pbxproj"
+          sed -i '' 's/objectVersion = 77;/objectVersion = 56;/' "$PBX"
+          sed -i '' '/preferredProjectObjectVersion = 77;/d' "$PBX"
+          grep -n 'objectVersion' "$PBX" | head
 
       - name: Build unsigned iPhone app
         working-directory: ios/IAmCatVR
