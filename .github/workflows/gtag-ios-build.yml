@@ -7,18 +7,28 @@ on:
       - 'ios/MonkeTagVR/**'
       - '.github/workflows/gtag-ios-build.yml'
 permissions:
-  contents: write
+  contents: read
 jobs:
   ipa:
     runs-on: macos-15
-    timeout-minutes: 35
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - name: Install XcodeGen
         run: brew install xcodegen
+      - name: Fetch ufbx FBX runtime
+        working-directory: ios/MonkeTagVR
+        run: |
+          set -euo pipefail
+          mkdir -p Sources/UFBX
+          curl -fL --retry 4 https://raw.githubusercontent.com/ufbx/ufbx/master/ufbx.h -o Sources/UFBX/ufbx.h
+          curl -fL --retry 4 https://raw.githubusercontent.com/ufbx/ufbx/master/ufbx.c -o Sources/UFBX/ufbx.c
       - name: Generate project
         working-directory: ios/MonkeTagVR
         run: xcodegen generate
+      - name: Resolve packages
+        working-directory: ios/MonkeTagVR
+        run: xcodebuild -project MonkeTagVR.xcodeproj -scheme MonkeTagVR -resolvePackageDependencies
       - name: Build unsigned iPhone app
         working-directory: ios/MonkeTagVR
         run: |
@@ -33,34 +43,23 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY='' \
             build | tee xcodebuild.log
-      - name: Package IPA
+      - name: Package loader IPA
         working-directory: ios/MonkeTagVR
         run: |
           set -euo pipefail
           APP="build/Build/Products/Release-iphoneos/MonkeTagVR.app"
           test -d "$APP"
-          rm -rf Payload MonkeTagVR-v0.2-unsigned.ipa
+          rm -rf Payload MonkeTagVR-v0.3-loader-unsigned.ipa
           mkdir Payload
           cp -R "$APP" Payload/
-          zip -qry MonkeTagVR-v0.2-unsigned.ipa Payload
-          shasum -a 256 MonkeTagVR-v0.2-unsigned.ipa | tee MonkeTagVR-v0.2-unsigned.sha256
+          zip -qry MonkeTagVR-v0.3-loader-unsigned.ipa Payload
+          shasum -a 256 MonkeTagVR-v0.3-loader-unsigned.ipa | tee MonkeTagVR-v0.3-loader-unsigned.sha256
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MonkeTagVR-iOS-IPA
+          name: MonkeTagVR-v0.3-Loader-IPA
           path: |
-            ios/MonkeTagVR/MonkeTagVR-v0.2-unsigned.ipa
-            ios/MonkeTagVR/MonkeTagVR-v0.2-unsigned.sha256
+            ios/MonkeTagVR/MonkeTagVR-v0.3-loader-unsigned.ipa
+            ios/MonkeTagVR/MonkeTagVR-v0.3-loader-unsigned.sha256
             ios/MonkeTagVR/xcodebuild.log
           if-no-files-found: error
-      - name: Publish release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          TAG="monketag-v0.2-${GITHUB_RUN_NUMBER}"
-          gh release create "$TAG" \
-            ios/MonkeTagVR/MonkeTagVR-v0.2-unsigned.ipa \
-            ios/MonkeTagVR/MonkeTagVR-v0.2-unsigned.sha256 \
-            --target "$GITHUB_SHA" \
-            --title "MonkeTag VR iOS v0.2" \
-            --notes "Unsigned iPhone/VRBox build with stereo view, Vision hand tracking, arm locomotion, and room-code multiplayer prototype."
