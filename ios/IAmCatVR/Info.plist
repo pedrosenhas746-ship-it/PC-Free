@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleDisplayName</key><string>I Am Cat VR</string>
+<key>CFBundleIdentifier</key><string>com.pedro.iamcatvr</string>
+<key>CFBundleName</key><string>IAmCatVR</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleShortVersionString</key><string>0.3</string>
+<key>CFBundleVersion</key><string>3</string>
+<key>LSRequiresIPhoneOS</key><true/>
+<key>MinimumOSVersion</key><string>15.0</string>
+<key>NSCameraUsageDescription</key><string>Camera is used for 6DoF world tracking and hand tracking in VR.</string>
+<key>UIRequiredDeviceCapabilities</key><array><string>arm64</string><string>arkit</string></array>
+<key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
+<key>UIApplicationSceneManifest</key><dict><key>UIApplicationSupportsMultipleScenes</key><false/></dict>
+</dict></plist>
