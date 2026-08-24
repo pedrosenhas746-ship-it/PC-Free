@@ -18,9 +18,9 @@ targets:
       properties:
         CFBundleDisplayName: CHAOS VR
         CFBundleName: CHAOS VR
-        CFBundleShortVersionString: "0.1"
-        CFBundleVersion: "1"
-        NSCameraUsageDescription: "CHAOS VR uses the camera for mixed reality and spatial tracking."
+        CFBundleShortVersionString: "0.2"
+        CFBundleVersion: "2"
+        NSCameraUsageDescription: "CHAOS VR uses the rear camera for mixed reality, head tracking and experimental hand tracking."
         UIRequiredDeviceCapabilities:
           - arm64
           - arkit
@@ -37,4 +37,5 @@ targets:
     dependencies:
       - sdk: ARKit.framework
       - sdk: SceneKit.framework
+      - sdk: Vision.framework
       - sdk: UIKit.framework
