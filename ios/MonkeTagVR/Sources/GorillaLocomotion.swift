@@ -81,11 +81,11 @@ final class GorillaLocomotion {
 
     private func rayHit(scene: SCNScene, from: SCNVector3, to: SCNVector3) -> SCNVector3? {
         guard (to - from).length > 0.001 else { return nil }
-        let options: [SCNHitTestOption: Any] = [
-            .searchMode: SCNHitTestSearchMode.closest.rawValue,
-            .backFaceCulling: false,
-            .categoryBitMask: 1,
-            .ignoreHiddenNodes: true
+        let options: [String: Any] = [
+            SCNHitTestOption.searchMode.rawValue: SCNHitTestSearchMode.closest.rawValue,
+            SCNHitTestOption.backFaceCulling.rawValue: false,
+            SCNHitTestOption.categoryBitMask.rawValue: 1,
+            SCNHitTestOption.ignoreHiddenNodes.rawValue: true
         ]
         return scene.rootNode.hitTestWithSegment(from: from, to: to, options: options).first?.worldCoordinates
     }
