@@ -1,0 +1,179 @@
+name: NEXA Private Delegate Builder
+
+on:
+  workflow_call:
+    inputs:
+      head_ref:
+        description: Private caller branch to build and update
+        required: true
+        type: string
+    secrets:
+      UNITY_LICENSE:
+        required: false
+      UNITY_SERIAL:
+        required: false
+      UNITY_EMAIL:
+        required: false
+      UNITY_PASSWORD:
+        required: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout private caller branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.head_ref }}
+          fetch-depth: 1
+
+      - name: Free disk
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo docker system prune -af --volumes || true
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/powershell /opt/az /opt/microsoft /usr/local/julia* || true
+          sudo apt-get clean || true
+          sudo rm -rf /var/lib/apt/lists/* || true
+          df -h /
+          FREE_GB=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
+          test "$FREE_GB" -ge 30
+
+      - name: Extract and patch NEXA
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP='NEXA_XR_OS_12_1_FULL_RUNTIME_FIXED_BUILD.zip'
+          test -f "$ZIP"
+          test -f .bruteforce/patch_build.py
+          test -f .bruteforce/NexaSuperhotVrBridgeRuntime.cs
+          test -f .bruteforce/NexaSuperhotCiBuild.cs
+          rm -rf .delegate-src
+          mkdir -p .delegate-src
+          unzip -q "$ZIP" -d .delegate-src
+          PROJECT=$(find .delegate-src -type f -path '*/ProjectSettings/ProjectVersion.txt' -printf '%h\n' | sed 's#/ProjectSettings$##' | head -1)
+          test -n "$PROJECT"
+          echo "PROJECT=$PROJECT" >> "$GITHUB_ENV"
+          python3 .bruteforce/patch_build.py "$PROJECT"
+          mkdir -p "$PROJECT/Assets/Nexa/XR_OS/Compatibility" "$PROJECT/Assets/Nexa/Editor"
+          cp .bruteforce/NexaSuperhotVrBridgeRuntime.cs "$PROJECT/Assets/Nexa/XR_OS/Compatibility/NexaSuperhotVrBridgeRuntime.cs"
+          cp .bruteforce/NexaSuperhotCiBuild.cs "$PROJECT/Assets/Nexa/Editor/NexaSuperhotCiBuild.cs"
+          grep -q 'm_EditorVersion: 6000.2.15f1' "$PROJECT/ProjectSettings/ProjectVersion.txt"
+
+      - name: Preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$(dirname "$PROJECT")/ci/preflight.py" "$PROJECT" || python3 ci/preflight.py "$PROJECT"
+          test -f "$PROJECT/Assets/Nexa/Editor/NexaSuperhotCiBuild.cs"
+
+      - name: Check Unity license
+        shell: bash
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "$UNITY_LICENSE" ]; then exit 0; fi
+          if [ -n "$UNITY_SERIAL" ] && [ -n "$UNITY_EMAIL" ] && [ -n "$UNITY_PASSWORD" ]; then exit 0; fi
+          echo '::error::Unity license credentials unavailable in delegated workflow.'
+          exit 1
+
+      - name: Build Android APK
+        id: unity
+        continue-on-error: true
+        uses: game-ci/unity-builder@v5.0.0
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          BUILD_PATH: Build/Android
+          BUILD_FILE: NEXA-SUPERHOT-VR.apk
+          VERSION: '22.0.0'
+          ANDROID_VERSION_CODE: '220001'
+        with:
+          projectPath: ${{ env.PROJECT }}
+          unityVersion: '6000.2.15f1'
+          targetPlatform: Android
+          buildMethod: Nexa.Editor.CI.NexaSuperhotCiBuild.BuildAndroid
+          androidExportType: androidPackage
+          versioning: None
+
+      - name: Find APK and collect diagnostics
+        if: always()
+        id: apk
+        shell: bash
+        run: |
+          set +e
+          OUT='build-output/delegated-v1'
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+          cp "$PROJECT/ci-output/"*.txt "$OUT/" 2>/dev/null || true
+          cp "$PROJECT/ci-output/"*.json "$OUT/" 2>/dev/null || true
+          APK=$(find "$PROJECT" "$GITHUB_WORKSPACE" -type f -name '*.apk' -print0 2>/dev/null | xargs -0 -r ls -S 2>/dev/null | head -1)
+          if [ -n "$APK" ] && [ -s "$APK" ]; then
+            echo "APK=$APK" >> "$GITHUB_ENV"
+            echo 'found=true' >> "$GITHUB_OUTPUT"
+            sha256sum "$APK" | tee "$OUT/apk.sha256"
+            stat -c '%s' "$APK" > "$OUT/apk.bytes"
+          else
+            echo 'found=false' >> "$GITHUB_OUTPUT"
+          fi
+          {
+            echo "unity_outcome=${{ steps.unity.outcome }}"
+            echo "utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            df -h /
+            echo '--- build reports ---'
+            cat "$OUT/"*.txt 2>/dev/null || true
+            echo '--- compiler/gradle/il2cpp errors ---'
+            find "$PROJECT" -type f \( -name '*.log' -o -name '*FAILED*.txt' \) -size -8M -print0 2>/dev/null | xargs -0 -r grep -EHi 'error CS[0-9]+|Gradle|IL2CPP|BuildFailed|Exception|FAILURE' 2>/dev/null | tail -1000 || true
+          } > "$OUT/status.txt"
+          tail -n 500 "$OUT/status.txt" || true
+
+      - name: Store real APK on private caller branch
+        if: steps.apk.outputs.found == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT='build-output/NEXA-APK-DELEGATED'
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+          SHA=$(sha256sum "$APK" | awk '{print $1}')
+          BYTES=$(stat -c %s "$APK")
+          if [ "$BYTES" -lt 95000000 ]; then
+            cp "$APK" "$OUT/NEXA-SUPERHOT-VR.apk"
+            printf 'name=NEXA-SUPERHOT-VR.apk\nsha256=%s\nbytes=%s\nmode=direct\n' "$SHA" "$BYTES" > "$OUT/manifest.txt"
+          else
+            base64 -w0 "$APK" | fold -w 700000 | split -d -a 4 - "$OUT/part-"
+            PARTS=$(find "$OUT" -type f -name 'part-*' | wc -l)
+            printf 'name=NEXA-SUPERHOT-VR.apk\nsha256=%s\nbytes=%s\nmode=base64-parts\nparts=%s\n' "$SHA" "$BYTES" "$PARTS" > "$OUT/manifest.txt"
+          fi
+          git config user.name 'nexa-build-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add "$OUT" build-output/delegated-v1
+          git commit -m "Build delegated NEXA APK ${SHA:0:12}"
+          git push origin "HEAD:${{ inputs.head_ref }}"
+
+      - name: Persist diagnostics on private caller branch
+        if: steps.apk.outputs.found != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'nexa-build-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add build-output/delegated-v1
+          git commit -m 'Persist delegated NEXA build diagnostics' || true
+          git push origin "HEAD:${{ inputs.head_ref }}" || true
+
+      - name: Require APK
+        if: steps.apk.outputs.found != 'true'
+        shell: bash
+        run: |
+          echo 'Delegated Unity build did not produce an APK.'
+          exit 1
