@@ -16,15 +16,27 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Install ilspycmd locally
+      - name: Install ilspycmd and bundle matching .NET runtime
         run: |
           set -euxo pipefail
           mkdir -p /tmp/ilspy
           dotnet tool install ilspycmd --tool-path /tmp/ilspy
           /tmp/ilspy/ilspycmd --version
           tar -C /tmp -czf /tmp/ilspycmd-linux.tar.gz ilspy
+
+          DOTNET_VER=$(dotnet --list-runtimes | awk '/Microsoft.NETCore.App 10\./ {gsub(/[\[\]]/,"",$3); print $2; exit}')
+          test -n "$DOTNET_VER"
+          mkdir -p /tmp/dotnet-runtime/host/fxr /tmp/dotnet-runtime/shared/Microsoft.NETCore.App
+          cp /usr/share/dotnet/dotnet /tmp/dotnet-runtime/
+          cp -a "/usr/share/dotnet/host/fxr/$DOTNET_VER" /tmp/dotnet-runtime/host/fxr/
+          cp -a "/usr/share/dotnet/shared/Microsoft.NETCore.App/$DOTNET_VER" /tmp/dotnet-runtime/shared/Microsoft.NETCore.App/
+          tar -C /tmp -czf /tmp/dotnet10-runtime-linux-x64.tar.gz dotnet-runtime
+          ls -lh /tmp/ilspycmd-linux.tar.gz /tmp/dotnet10-runtime-linux-x64.tar.gz
+
       - uses: actions/upload-artifact@v4
         with:
-          name: ilspycmd-linux
-          path: /tmp/ilspycmd-linux.tar.gz
+          name: ilspycmd-linux-with-runtime
+          path: |
+            /tmp/ilspycmd-linux.tar.gz
+            /tmp/dotnet10-runtime-linux-x64.tar.gz
           retention-days: 1
