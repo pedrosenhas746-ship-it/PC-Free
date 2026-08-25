@@ -1,0 +1,30 @@
+name: Fetch ILSpyCmd
+
+on:
+  push:
+    branches: [superhotvr-ios-handtracking]
+    paths:
+      - '.github/workflows/fetch-ilspycmd.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Install ilspycmd locally
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/ilspy
+          dotnet tool install ilspycmd --tool-path /tmp/ilspy
+          /tmp/ilspy/ilspycmd --version
+          tar -C /tmp -czf /tmp/ilspycmd-linux.tar.gz ilspy
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ilspycmd-linux
+          path: /tmp/ilspycmd-linux.tar.gz
+          retention-days: 1
