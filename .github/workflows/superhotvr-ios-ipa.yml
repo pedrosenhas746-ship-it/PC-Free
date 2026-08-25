@@ -1,16 +1,11 @@
-name: SUPERHOT VR iPhone Hand Tracking IPA
+name: SUPERHOT VR iPhone Recovered Levels IPA
 
 on:
   workflow_dispatch:
   push:
     branches: [superhotvr-ios-handtracking]
     paths:
-      - 'superhotvr-ios/**'
-      - '.github/workflows/superhotvr-ios-ipa.yml'
-  pull_request:
-    branches: [main]
-    paths:
-      - 'superhotvr-ios/**'
+      - 'superhotvr-ios-v2/**'
       - '.github/workflows/superhotvr-ios-ipa.yml'
 
 permissions:
@@ -19,7 +14,7 @@ permissions:
 
 jobs:
   build-ipa:
-    name: Build SUPERHOT VR IPA
+    name: Build SUPERHOT VR V2 IPA
     runs-on: macos-latest
     timeout-minutes: 45
     steps:
@@ -35,64 +30,62 @@ jobs:
       - name: Install XcodeGen
         run: |
           set -euxo pipefail
-          if ! command -v xcodegen >/dev/null 2>&1; then
-            brew install xcodegen
-          fi
+          if ! command -v xcodegen >/dev/null 2>&1; then brew install xcodegen; fi
           xcodegen --version
 
       - name: Generate Xcode project
         run: |
           set -euxo pipefail
-          cd superhotvr-ios
+          cd superhotvr-ios-v2
           xcodegen generate
-          test -f SuperhotVR.xcodeproj/project.pbxproj
+          test -f SuperhotVRFull.xcodeproj/project.pbxproj
 
       - name: Build arm64 iPhone app
         run: |
           set -euxo pipefail
-          cd superhotvr-ios
+          cd superhotvr-ios-v2
           xcodebuild \
-            -project SuperhotVR.xcodeproj \
-            -scheme SuperhotVR \
+            -project SuperhotVRFull.xcodeproj \
+            -scheme SuperhotVRFull \
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
-            -derivedDataPath "$GITHUB_WORKSPACE/DerivedData-SuperhotVR" \
+            -derivedDataPath "$GITHUB_WORKSPACE/DerivedData-SuperhotVRFull" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY='' \
             DEVELOPMENT_TEAM='' \
             ONLY_ACTIVE_ARCH=NO \
             ARCHS=arm64 \
-            build | tee "$GITHUB_WORKSPACE/superhot-xcodebuild.log"
+            build | tee "$GITHUB_WORKSPACE/superhot-full-xcodebuild.log"
 
-      - name: Package unsigned IPA
+      - name: Package unsigned IPA shell
         run: |
           set -euxo pipefail
-          APP=$(find DerivedData-SuperhotVR/Build/Products/Release-iphoneos -maxdepth 1 -type d -name '*.app' | head -1)
+          APP=$(find DerivedData-SuperhotVRFull/Build/Products/Release-iphoneos -maxdepth 1 -type d -name '*.app' | head -1)
           test -n "$APP"
           test -f "$APP/Info.plist"
           rm -rf Payload
           mkdir -p Payload
-          cp -R "$APP" Payload/SUPERHOTVR.app
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' Payload/SUPERHOTVR.app/Info.plist | tee superhot-bundle-id.txt
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' Payload/SUPERHOTVR.app/Info.plist | tee superhot-executable.txt
-          test -f "Payload/SUPERHOTVR.app/$(cat superhot-executable.txt)"
-          file "Payload/SUPERHOTVR.app/$(cat superhot-executable.txt)" | tee superhot-binary.txt
-          ditto -c -k --sequesterRsrc --keepParent Payload SUPERHOTVR-HandTracking-iPhone-UNSIGNED.ipa
-          shasum -a 256 SUPERHOTVR-HandTracking-iPhone-UNSIGNED.ipa | tee SUPERHOTVR-HandTracking-iPhone-UNSIGNED.sha256
-          unzip -t SUPERHOTVR-HandTracking-iPhone-UNSIGNED.ipa
+          cp -R "$APP" Payload/SuperhotVRFull.app
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' Payload/SuperhotVRFull.app/Info.plist | tee superhot-bundle-id.txt
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' Payload/SuperhotVRFull.app/Info.plist | tee superhot-executable.txt
+          test -f "Payload/SuperhotVRFull.app/$(cat superhot-executable.txt)"
+          file "Payload/SuperhotVRFull.app/$(cat superhot-executable.txt)" | tee superhot-binary.txt
+          ditto -c -k --sequesterRsrc --keepParent Payload SUPERHOTVR-RecoveredLevels-iPhone-SHELL-UNSIGNED.ipa
+          shasum -a 256 SUPERHOTVR-RecoveredLevels-iPhone-SHELL-UNSIGNED.ipa | tee SUPERHOTVR-RecoveredLevels-iPhone-SHELL-UNSIGNED.sha256
+          unzip -t SUPERHOTVR-RecoveredLevels-iPhone-SHELL-UNSIGNED.ipa
 
-      - name: Upload IPA
+      - name: Upload IPA shell
         uses: actions/upload-artifact@v4
         with:
-          name: SUPERHOTVR-HandTracking-iPhone-IPA-${{ github.run_number }}
+          name: SUPERHOTVR-RecoveredLevels-iPhone-Shell-${{ github.run_number }}
           path: |
-            SUPERHOTVR-HandTracking-iPhone-UNSIGNED.ipa
-            SUPERHOTVR-HandTracking-iPhone-UNSIGNED.sha256
+            SUPERHOTVR-RecoveredLevels-iPhone-SHELL-UNSIGNED.ipa
+            SUPERHOTVR-RecoveredLevels-iPhone-SHELL-UNSIGNED.sha256
             superhot-bundle-id.txt
             superhot-executable.txt
             superhot-binary.txt
-            superhot-xcodebuild.log
+            superhot-full-xcodebuild.log
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7
