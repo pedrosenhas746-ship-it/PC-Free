@@ -1,0 +1,37 @@
+name: Fetch Unity 2018.4.36f1 Editor and iOS Support
+
+on:
+  push:
+    branches: [superhotvr-ios-handtracking]
+    paths:
+      - '.github/workflows/fetch-unity2018-editor-ios.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Download official Unity editor and iOS support
+        run: |
+          set -euxo pipefail
+          curl -fL --retry 4 --retry-delay 3 \
+            'https://download.unity3d.com/download_unity/6cd387d23174/LinuxEditorInstaller/Unity-2018.4.36f1.tar.xz' \
+            -o /tmp/Unity-2018.4.36f1.tar.xz
+          curl -fL --retry 4 --retry-delay 3 \
+            'https://download.unity3d.com/download_unity/6cd387d23174/LinuxEditorTargetInstaller/UnitySetup-iOS-Support-for-Editor-2018.4.36f1.tar.xz' \
+            -o /tmp/UnitySetup-iOS-Support-for-Editor-2018.4.36f1.tar.xz
+          ls -lh /tmp/Unity*.tar.xz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Unity-2018.4.36f1-Linux-Editor-iOS
+          path: |
+            /tmp/Unity-2018.4.36f1.tar.xz
+            /tmp/UnitySetup-iOS-Support-for-Editor-2018.4.36f1.tar.xz
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 1
