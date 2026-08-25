@@ -1,0 +1,29 @@
+name: Fetch AssetRipper Linux
+
+on:
+  push:
+    branches: [superhotvr-ios-handtracking]
+    paths:
+      - '.github/workflows/fetch-assetripper.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download AssetRipper 2.0.0
+        run: |
+          set -euxo pipefail
+          curl -fL --retry 3 -o AssetRipper_linux_x64.tar.xz \
+            https://github.com/AssetRipper/AssetRipper/releases/download/2.0.0/AssetRipper_linux_x64.tar.xz
+          sha256sum AssetRipper_linux_x64.tar.xz
+          test -s AssetRipper_linux_x64.tar.xz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AssetRipper-linux-x64
+          path: AssetRipper_linux_x64.tar.xz
+          if-no-files-found: error
+          retention-days: 1
