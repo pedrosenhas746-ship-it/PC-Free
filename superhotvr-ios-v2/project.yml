@@ -1,0 +1,26 @@
+name: SuperhotVRFull
+options:
+  bundleIdPrefix: com.nexa
+  deploymentTarget:
+    iOS: "15.0"
+targets:
+  SuperhotVRFull:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nexa.superhotvr.full
+        PRODUCT_NAME: SuperhotVRFull
+        SWIFT_VERSION: 5.0
+        TARGETED_DEVICE_FAMILY: "1"
+        IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: "SUPERHOT VR"
+        INFOPLIST_KEY_NSCameraUsageDescription: "Camera usada para ARKit 6DoF e rastreamento das maos."
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIRequiresFullScreen: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        CODE_SIGN_STYLE: Automatic
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
