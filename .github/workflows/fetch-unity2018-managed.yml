@@ -1,0 +1,48 @@
+name: Fetch Unity 2018.4.36f1 Managed DLLs
+
+on:
+  push:
+    branches: [superhotvr-ios-handtracking]
+    paths:
+      - '.github/workflows/fetch-unity2018-managed.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Download Unity 2018.4.36f1 Linux editor
+        run: |
+          set -euxo pipefail
+          curl -fL --retry 4 --retry-delay 3 \
+            'https://download.unity3d.com/download_unity/6cd387d23174/LinuxEditorInstaller/Unity-2018.4.36f1.tar.xz' \
+            -o /tmp/unity.tar.xz
+          ls -lh /tmp/unity.tar.xz
+      - name: Extract managed reference assemblies
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/unity-extract /tmp/unity-managed
+          tar -xJf /tmp/unity.tar.xz -C /tmp/unity-extract
+          find /tmp/unity-extract -type f \( \
+              -name 'UnityEngine*.dll' -o \
+              -name 'mscorlib.dll' -o \
+              -name 'System.dll' -o \
+              -name 'System.Core.dll' -o \
+              -name 'System.Xml.dll' -o \
+              -name 'netstandard.dll' \
+            \) -print -exec cp -n {} /tmp/unity-managed/ \;
+          echo 'Managed DLL count:'
+          find /tmp/unity-managed -maxdepth 1 -type f -name '*.dll' | wc -l
+          ls -lh /tmp/unity-managed | head -80
+          test -f /tmp/unity-managed/UnityEngine.CoreModule.dll
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Unity-2018.4.36f1-Managed-DLLs
+          path: /tmp/unity-managed/*.dll
+          if-no-files-found: error
+          retention-days: 1
