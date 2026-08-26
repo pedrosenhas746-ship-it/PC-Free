@@ -13,7 +13,8 @@ targets:
     type: application
     platform: iOS
     sources:
-      - path: Sources
+      - path: Sources/AppDelegate.swift
+      - path: Sources/FitnessGame.swift
     info:
       path: Sources/Info.plist
       properties:
