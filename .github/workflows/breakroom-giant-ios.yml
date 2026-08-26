@@ -1,0 +1,106 @@
+name: BREAKROOM Giant iOS IPA
+
+on:
+  push:
+    branches: [breakroom-fitness-giant-v03]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  giant-ios:
+    name: Build BREAKROOM Giant MR IPA
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode environment
+        run: |
+          set -euxo pipefail
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          python3 --version
+
+      - name: Generate original BREAKROOM assets
+        run: |
+          set -euxo pipefail
+          cd BREAKROOM_FITNESS_IOS
+          python3 generate_assets.py
+          find Resources -type f -maxdepth 3 -print
+          du -sh Resources
+          test -f Resources/Models/longsword.obj
+          test -f Resources/Models/enemy_helmet.obj
+          test -f Resources/Audio/parry.wav
+
+      - name: Install XcodeGen
+        run: |
+          set -euxo pipefail
+          if ! command -v xcodegen >/dev/null 2>&1; then brew install xcodegen; fi
+          xcodegen --version
+
+      - name: Generate Xcode project
+        run: |
+          set -euxo pipefail
+          cd BREAKROOM_FITNESS_IOS
+          xcodegen generate
+          test -f BreakroomFitness.xcodeproj/project.pbxproj
+
+      - name: Build arm64 iPhone app
+        run: |
+          set -o pipefail
+          cd BREAKROOM_FITNESS_IOS
+          xcodebuild \
+            -project BreakroomFitness.xcodeproj \
+            -scheme BreakroomFitness \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$GITHUB_WORKSPACE/DerivedDataGiant" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' \
+            DEVELOPMENT_TEAM='' \
+            ONLY_ACTIVE_ARCH=NO \
+            ARCHS=arm64 \
+            build | tee "$GITHUB_WORKSPACE/breakroom-giant-xcodebuild.log"
+
+      - name: Validate bundled resources
+        run: |
+          set -euxo pipefail
+          APP=$(find DerivedDataGiant/Build/Products/Release-iphoneos -maxdepth 1 -type d -name '*.app' | head -1)
+          test -n "$APP"
+          find "$APP" -type f | head -80
+          find "$APP" -type f -name 'longsword.obj' | grep .
+          find "$APP" -type f -name 'parry.wav' | grep .
+          du -sh "$APP"
+
+      - name: Package BREAKROOM Giant IPA
+        run: |
+          set -euxo pipefail
+          APP=$(find DerivedDataGiant/Build/Products/Release-iphoneos -maxdepth 1 -type d -name '*.app' | head -1)
+          rm -rf Payload
+          mkdir -p Payload
+          cp -R "$APP" Payload/BreakroomGiant.app
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' Payload/BreakroomGiant.app/Info.plist | tee giant-bundle-id.txt
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' Payload/BreakroomGiant.app/Info.plist | tee giant-executable.txt
+          test -f "Payload/BreakroomGiant.app/$(cat giant-executable.txt)"
+          ditto -c -k --sequesterRsrc --keepParent Payload BREAKROOM-GIANT-MR-v0.3-UNSIGNED.ipa
+          shasum -a 256 BREAKROOM-GIANT-MR-v0.3-UNSIGNED.ipa | tee BREAKROOM-GIANT-MR-v0.3-UNSIGNED.sha256
+          unzip -t BREAKROOM-GIANT-MR-v0.3-UNSIGNED.ipa
+          ls -lh BREAKROOM-GIANT-MR-v0.3-UNSIGNED.ipa
+
+      - name: Upload BREAKROOM Giant IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: BREAKROOM-GIANT-MR-iPhone-${{ github.run_number }}
+          path: |
+            BREAKROOM-GIANT-MR-v0.3-UNSIGNED.ipa
+            BREAKROOM-GIANT-MR-v0.3-UNSIGNED.sha256
+            giant-bundle-id.txt
+            giant-executable.txt
+            breakroom-giant-xcodebuild.log
+          if-no-files-found: error
+          retention-days: 14
