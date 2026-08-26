@@ -88,6 +88,84 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  breakroom-fitness-ios:
+    name: Build BREAKROOM Fitness MR IPA
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode environment
+        run: |
+          set -euxo pipefail
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          swift --version
+
+      - name: Install XcodeGen
+        run: |
+          set -euxo pipefail
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+          xcodegen --version
+
+      - name: Generate BREAKROOM Fitness Xcode project
+        run: |
+          set -euxo pipefail
+          cd BREAKROOM_FITNESS_IOS
+          xcodegen generate
+          test -f BreakroomFitness.xcodeproj/project.pbxproj
+
+      - name: Build BREAKROOM Fitness arm64 app
+        run: |
+          set -o pipefail
+          cd BREAKROOM_FITNESS_IOS
+          xcodebuild \
+            -project BreakroomFitness.xcodeproj \
+            -scheme BreakroomFitness \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$GITHUB_WORKSPACE/DerivedDataFitness" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' \
+            DEVELOPMENT_TEAM='' \
+            ONLY_ACTIVE_ARCH=NO \
+            ARCHS=arm64 \
+            build | tee "$GITHUB_WORKSPACE/breakroom-fitness-xcodebuild.log"
+
+      - name: Package BREAKROOM Fitness IPA
+        run: |
+          set -euxo pipefail
+          APP=$(find DerivedDataFitness/Build/Products/Release-iphoneos -maxdepth 1 -type d -name '*.app' | head -1)
+          test -n "$APP"
+          test -f "$APP/Info.plist"
+          rm -rf PayloadFitness
+          mkdir -p PayloadFitness
+          cp -R "$APP" PayloadFitness/BreakroomFitness.app
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' PayloadFitness/BreakroomFitness.app/Info.plist | tee breakroom-bundle-id.txt
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' PayloadFitness/BreakroomFitness.app/Info.plist | tee breakroom-executable.txt
+          test -f "PayloadFitness/BreakroomFitness.app/$(cat breakroom-executable.txt)"
+          cd PayloadFitness/..
+          ditto -c -k --sequesterRsrc --keepParent PayloadFitness BREAKROOM-FITNESS-MR-iPhone-UNSIGNED.ipa
+          shasum -a 256 BREAKROOM-FITNESS-MR-iPhone-UNSIGNED.ipa | tee BREAKROOM-FITNESS-MR-iPhone-UNSIGNED.sha256
+          unzip -t BREAKROOM-FITNESS-MR-iPhone-UNSIGNED.ipa
+
+      - name: Upload BREAKROOM Fitness IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: BREAKROOM-FITNESS-MR-iPhone-${{ github.run_number }}
+          path: |
+            BREAKROOM-FITNESS-MR-iPhone-UNSIGNED.ipa
+            BREAKROOM-FITNESS-MR-iPhone-UNSIGNED.sha256
+            breakroom-bundle-id.txt
+            breakroom-executable.txt
+            breakroom-fitness-xcodebuild.log
+          if-no-files-found: error
+          retention-days: 14
+
   breakroom-mr:
     name: Build BREAKROOM MR Android EMRD
     runs-on: ubuntu-latest
