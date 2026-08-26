@@ -14,13 +14,16 @@ targets:
     platform: iOS
     sources:
       - path: Sources/AppDelegate.swift
-      - path: Sources/FitnessGameV2ViewController.swift
+      - path: Sources/GiantRuntime.swift
+      - path: Sources/GiantGameViewController.swift
+    resources:
+      - path: Resources
     info:
       path: Sources/Info.plist
       properties:
-        CFBundleDisplayName: BREAKROOM Fitness MR
+        CFBundleDisplayName: BREAKROOM Giant MR
         UILaunchScreen: {}
-        NSCameraUsageDescription: BREAKROOM Fitness MR uses the camera for mixed reality and visible hand tracking.
+        NSCameraUsageDescription: BREAKROOM Giant MR uses the camera for mixed reality and visible hand tracking.
         UIRequiredDeviceCapabilities:
           - arkit
         UISupportedInterfaceOrientations:
@@ -28,7 +31,7 @@ targets:
           - UIInterfaceOrientationLandscapeRight
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.breakroom.fitnessmr
+        PRODUCT_BUNDLE_IDENTIFIER: com.breakroom.fitnessmr.giant
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: ""
     dependencies:
