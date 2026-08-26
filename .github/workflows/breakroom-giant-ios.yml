@@ -44,6 +44,8 @@ jobs:
 
           src = Path('BREAKROOM_FITNESS_IOS/Sources')
           game = src / 'GiantGameViewController.swift'
+          runtime = src / 'GiantRuntime.swift'
+
           s = game.read_text()
           s = s.replace(
               'let d=min(gSegDistance(h,a,b),gSegDistance(t,a,b),gSegDistance(p,a,b))',
@@ -51,7 +53,6 @@ jobs:
           )
           game.write_text(s)
 
-          runtime = src / 'GiantRuntime.swift'
           s = runtime.read_text()
           s = s.replace('enum Archetype:String,CaseIterable {', 'enum Archetype:String,CaseIterable,Equatable {')
           s = s.replace('enum State { case approach,strafe,feint,telegraph,strike,recover,evade,stunned,disarmed,dead }',
@@ -60,20 +61,21 @@ jobs:
                         'guard let src=sources[name] else{return}')
           runtime.write_text(s)
 
-          # Swift 6.3 rejects many context-free leading-dot numeric literals used by
-          # the compact prototype style. Convert .58 -> 0.58, -.3 -> -0.3, etc.
           for p in [runtime, game]:
               s = p.read_text()
+              # .58 -> 0.58 and -.58 -> -0.58, without touching .systemRed/.init/etc.
               s = re.sub(r'(?<![A-Za-z0-9_])\.(\d+)', r'0.\1', s)
+              # Swift 6 requires consistent whitespace around simple assignment.
+              # Exclude ==, !=, <=, >=, +=, -=, *=, /= and similar operators.
+              s = re.sub(r'(?<![=!<>+\-*/%&|^?])\s*=\s*(?!=)', ' = ', s)
               p.write_text(s)
           PY
 
-          # Let Apple's formatter normalize operator whitespace for Swift 6.3.
           if xcrun --find swift-format >/dev/null 2>&1; then
             xcrun swift-format format -i BREAKROOM_FITNESS_IOS/Sources/GiantRuntime.swift
             xcrun swift-format format -i BREAKROOM_FITNESS_IOS/Sources/GiantGameViewController.swift
           else
-            echo 'swift-format unavailable; continuing after numeric normalization'
+            echo 'swift-format unavailable; continuing after normalization'
           fi
 
       - name: Install XcodeGen
