@@ -87,3 +87,99 @@ jobs:
             xcodebuild.log
           if-no-files-found: error
           retention-days: 14
+
+  breakroom-mr:
+    name: Build BREAKROOM MR Android EMRD
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout BREAKROOM source
+        uses: actions/checkout@v4
+        with:
+          ref: breakroom-mr
+
+      - name: Download official EnJoyTheMR SDK
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 'https://raw.githubusercontent.com/Zhes-20/etmr-repo/main/ETMR_AppSDK_withXLua_20260814.unitypackage' -o /tmp/etmr-sdk.unitypackage
+          test -s /tmp/etmr-sdk.unitypackage
+          ls -lh /tmp/etmr-sdk.unitypackage
+
+      - name: Reconstruct SDK in Unity project
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import tarfile, pathlib, shutil
+          src=pathlib.Path('/tmp/etmr-sdk.unitypackage')
+          tmp=pathlib.Path('/tmp/etmr_unpack')
+          project=pathlib.Path('BREAKROOM_MR')
+          if tmp.exists(): shutil.rmtree(tmp)
+          tmp.mkdir(parents=True)
+          with tarfile.open(src,'r:gz') as tf: tf.extractall(tmp)
+          count=0
+          for d in tmp.iterdir():
+              if not d.is_dir(): continue
+              pathname=d/'pathname'
+              if not pathname.exists(): continue
+              rel=pathname.read_text(encoding='utf-8').strip()
+              if not rel: continue
+              dst=project/rel
+              dst.parent.mkdir(parents=True,exist_ok=True)
+              asset=d/'asset'; meta=d/'asset.meta'
+              if asset.exists(): shutil.copy2(asset,dst)
+              if meta.exists(): shutil.copy2(meta,pathlib.Path(str(dst)+'.meta'))
+              count+=1
+          print('SDK entries reconstructed:',count)
+          if count < 10: raise SystemExit('ETMR SDK extraction failed')
+          PY
+
+      - name: Validate 6DoF source
+        run: |
+          set -euo pipefail
+          test -f BREAKROOM_MR/Assets/BreakroomMR/Editor/BreakroomBuilder.cs
+          test -f BREAKROOM_MR/Assets/BreakroomMR/Editor/ProceduralMeshFactory.cs
+          test -f BREAKROOM_MR/Assets/BreakroomMR/Lua/breakroom.lua.txt
+          grep -q 'GetHeadRotation' BREAKROOM_MR/Assets/BreakroomMR/Lua/breakroom.lua.txt
+          grep -q 'GetHandRotation' BREAKROOM_MR/Assets/BreakroomMR/Lua/breakroom.lua.txt
+          grep -q 'for i=0,20' BREAKROOM_MR/Assets/BreakroomMR/Lua/breakroom.lua.txt
+          ! grep -q 'typeof(' BREAKROOM_MR/Assets/BreakroomMR/Lua/breakroom.lua.txt
+          echo '6DoF source preflight passed'
+
+      - name: Build Android AssetBundle and EMRD
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          projectPath: BREAKROOM_MR
+          unityVersion: 2022.3.62f1
+          targetPlatform: Android
+          buildMethod: BreakroomMR.Editor.BreakroomBuilder.CI
+          allowDirtyBuild: true
+
+      - name: Validate final EMRD
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import zipfile,json,os
+          p='BREAKROOM_MR/Build/BreakroomMR/BREAKROOM_MR_ANDROID.emrd'
+          if not os.path.isfile(p): raise SystemExit('EMRD missing')
+          with zipfile.ZipFile(p) as z:
+              assert 'app.json' in z.namelist() and 'bundle' in z.namelist()
+              app=json.loads(z.read('app.json'))
+              assert app['type']=='bundle'
+              assert app['display']=='scene'
+              assert app['entryPrefab']=='BreakroomMRRoot'
+              print('bundle bytes:',z.getinfo('bundle').file_size)
+              print('emrd bytes:',os.path.getsize(p))
+          PY
+          ls -lh BREAKROOM_MR/Build/BreakroomMR/BREAKROOM_MR_ANDROID.emrd
+
+      - name: Upload BREAKROOM MR EMRD
+        uses: actions/upload-artifact@v4
+        with:
+          name: BREAKROOM-MR-ANDROID-EMRD-${{ github.run_number }}
+          path: BREAKROOM_MR/Build/BreakroomMR/BREAKROOM_MR_ANDROID.emrd
+          if-no-files-found: error
+          retention-days: 14
