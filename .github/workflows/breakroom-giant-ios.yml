@@ -51,7 +51,6 @@ jobs:
               'let d=min(gSegDistance(h,a,b),gSegDistance(t,a,b),gSegDistance(p,a,b))',
               'let d=min(gSegDistance(h,a,b),min(gSegDistance(t,a,b),gSegDistance(p,a,b)))'
           )
-          # `throws` is a Swift keyword; prototype used it as the throw counter.
           s = re.sub(r'\bthrows\b', 'throwCount', s)
           game.write_text(s)
 
@@ -65,7 +64,8 @@ jobs:
 
           for p in [runtime, game]:
               s = p.read_text()
-              s = re.sub(r'(?<![A-Za-z0-9_])\.(\d+)', r'0.\1', s)
+              # Add zero only to true leading decimals; never touch Swift ranges 0...999.
+              s = re.sub(r'(?<![A-Za-z0-9_.])\.(\d+)', r'0.\1', s)
               s = re.sub(r'(?<![=!<>+\-*/%&|^?])\s*=\s*(?!=)', ' = ', s)
               p.write_text(s)
           PY
