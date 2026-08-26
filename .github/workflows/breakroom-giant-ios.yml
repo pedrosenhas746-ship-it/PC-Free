@@ -64,7 +64,6 @@ jobs:
 
           for p in [runtime, game]:
               s = p.read_text()
-              # Add zero only to true leading decimals; never touch Swift ranges 0...999.
               s = re.sub(r'(?<![A-Za-z0-9_.])\.(\d+)', r'0.\1', s)
               s = re.sub(r'(?<![=!<>+\-*/%&|^?])\s*=\s*(?!=)', ' = ', s)
               p.write_text(s)
@@ -130,14 +129,29 @@ jobs:
         if: steps.build.outcome != 'success'
         run: exit 1
 
+      - name: Embed generated gameplay resources
+        run: |
+          set -euxo pipefail
+          APP=$(find DerivedDataGiant/Build/Products/Release-iphoneos -maxdepth 1 -type d -name '*.app' | head -1)
+          test -n "$APP"
+          mkdir -p "$APP/Models" "$APP/Audio" "$APP/Textures"
+          cp -R BREAKROOM_FITNESS_IOS/Resources/Models/. "$APP/Models/"
+          cp -R BREAKROOM_FITNESS_IOS/Resources/Audio/. "$APP/Audio/"
+          cp -R BREAKROOM_FITNESS_IOS/Resources/Textures/. "$APP/Textures/"
+
       - name: Validate bundled resources
         run: |
           set -euxo pipefail
           APP=$(find DerivedDataGiant/Build/Products/Release-iphoneos -maxdepth 1 -type d -name '*.app' | head -1)
           test -n "$APP"
-          find "$APP" -type f | head -80
-          find "$APP" -type f -name 'longsword.obj' | grep .
-          find "$APP" -type f -name 'parry.wav' | grep .
+          test -f "$APP/Models/longsword.obj"
+          test -f "$APP/Models/katana.obj"
+          test -f "$APP/Models/enemy_helmet.obj"
+          test -f "$APP/Audio/parry.wav"
+          test -f "$APP/Audio/body_hit.wav"
+          test -f "$APP/Textures/enemy_metal.ppm"
+          find "$APP/Models" -type f | sort
+          find "$APP/Audio" -type f | sort
           du -sh "$APP"
 
       - name: Package BREAKROOM Giant IPA
@@ -150,9 +164,12 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' Payload/BreakroomGiant.app/Info.plist | tee giant-bundle-id.txt
           /usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' Payload/BreakroomGiant.app/Info.plist | tee giant-executable.txt
           test -f "Payload/BreakroomGiant.app/$(cat giant-executable.txt)"
+          test -f Payload/BreakroomGiant.app/Models/longsword.obj
+          test -f Payload/BreakroomGiant.app/Audio/parry.wav
           ditto -c -k --sequesterRsrc --keepParent Payload BREAKROOM-GIANT-MR-v0.3-UNSIGNED.ipa
           shasum -a 256 BREAKROOM-GIANT-MR-v0.3-UNSIGNED.ipa | tee BREAKROOM-GIANT-MR-v0.3-UNSIGNED.sha256
           unzip -t BREAKROOM-GIANT-MR-v0.3-UNSIGNED.ipa
+          unzip -l BREAKROOM-GIANT-MR-v0.3-UNSIGNED.ipa | grep -E 'Models/longsword.obj|Audio/parry.wav|Payload/BreakroomGiant.app/BreakroomFitness'
           ls -lh BREAKROOM-GIANT-MR-v0.3-UNSIGNED.ipa
 
       - name: Upload BREAKROOM Giant IPA
