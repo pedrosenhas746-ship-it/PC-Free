@@ -51,6 +51,8 @@ jobs:
               'let d=min(gSegDistance(h,a,b),gSegDistance(t,a,b),gSegDistance(p,a,b))',
               'let d=min(gSegDistance(h,a,b),min(gSegDistance(t,a,b),gSegDistance(p,a,b)))'
           )
+          # `throws` is a Swift keyword; prototype used it as the throw counter.
+          s = re.sub(r'\bthrows\b', 'throwCount', s)
           game.write_text(s)
 
           s = runtime.read_text()
@@ -63,10 +65,7 @@ jobs:
 
           for p in [runtime, game]:
               s = p.read_text()
-              # .58 -> 0.58 and -.58 -> -0.58, without touching .systemRed/.init/etc.
               s = re.sub(r'(?<![A-Za-z0-9_])\.(\d+)', r'0.\1', s)
-              # Swift 6 requires consistent whitespace around simple assignment.
-              # Exclude ==, !=, <=, >=, +=, -=, *=, /= and similar operators.
               s = re.sub(r'(?<![=!<>+\-*/%&|^?])\s*=\s*(?!=)', ' = ', s)
               p.write_text(s)
           PY
