@@ -1,0 +1,552 @@
+-- BREAKROOM MR
+-- EnJoyTheMR Unity SDK / LuaBehaviour runtime.
+-- Uses lowerCamelCase lifecycle: start(), update(), onDestroy().
+
+local V3 = CS.UnityEngine.Vector3
+local Q = CS.UnityEngine.Quaternion
+local Mathf = CS.UnityEngine.Mathf
+local Time = CS.UnityEngine.Time
+
+local root, world, handsRoot, weaponsRoot, enemiesRoot, fxRoot
+local leftRig, rightRig, leftGrab, rightGrab
+local floorY = 0
+local interactionCount = 0
+local desiredEnemies = 4
+
+local links = {
+    {0,1},{1,2},{2,3},{3,4},
+    {0,5},{5,6},{6,7},{7,8},
+    {0,9},{9,10},{10,11},{11,12},
+    {0,13},{13,14},{14,15},{15,16},
+    {0,17},{17,18},{18,19},{19,20},
+    {5,9},{9,13},{13,17}
+}
+
+local bodyNames = {
+    "Pelvis","Chest","Head","UpperArm_L","LowerArm_L","UpperArm_R","LowerArm_R",
+    "Thigh_L","Shin_L","Thigh_R","Shin_R"
+}
+
+local hands = {
+    left  = {holding=nil, prevPinch=false, prevPalm=nil, velocity=V3.zero, lastHit=-10},
+    right = {holding=nil, prevPinch=false, prevPalm=nil, velocity=V3.zero, lastHit=-10}
+}
+
+local weapons = {}
+local arrows = {}
+local enemies = {}
+local weaponPrev = {}
+local bowDraw = {active=false, owner=nil, drawHand=nil, arrow=nil, amount=0}
+
+local function child(t,name)
+    if t == nil then return nil end
+    return t:Find(name)
+end
+
+local function distance(a,b)
+    if a==nil or b==nil then return 999 end
+    return V3.Distance(a,b)
+end
+
+local function tracked(side)
+    return EMRAPI.Input:IsHandTracked(side)
+end
+
+local function handPoint(side,point)
+    if not tracked(side) then return nil end
+    local x,y,z=EMRAPI.Input:GetHandPosition(side,point)
+    return V3(x,y,z)
+end
+
+local function handRotation(side,point)
+    local x,y,z,w=EMRAPI.Input:GetHandRotation(side,point)
+    return Q(x,y,z,w)
+end
+
+local function headPosition()
+    return V3(EMRAPI.Input:GetHeadPositionX(),EMRAPI.Input:GetHeadPositionY(),EMRAPI.Input:GetHeadPositionZ())
+end
+
+local function headRotation()
+    return Q(EMRAPI.Input:GetHeadRotationX(),EMRAPI.Input:GetHeadRotationY(),EMRAPI.Input:GetHeadRotationZ(),EMRAPI.Input:GetHeadRotationW())
+end
+
+local function isPinching(side)
+    if not tracked(side) then return false end
+    local thumb=handPoint(side,"ThumbTip")
+    local index=handPoint(side,"IndexTip")
+    if thumb~=nil and index~=nil and distance(thumb,index)<0.045 then return true end
+    return EMRAPI.Input:GetPinchStrength(side)>0.58
+end
+
+local function getRb(go)
+    if go==nil then return nil end
+    return go:GetComponent("Rigidbody")
+end
+
+local function setBone(rig,prefix,a,b)
+    local ja=child(rig,prefix.."J"..string.format("%02d",a))
+    local jb=child(rig,prefix.."J"..string.format("%02d",b))
+    local bone=child(rig,prefix.."B"..string.format("%02d",a).."_"..string.format("%02d",b))
+    if ja==nil or jb==nil or bone==nil then return end
+    local pa,pb=ja.position,jb.position
+    local delta=pb-pa
+    local len=delta.magnitude
+    if len<0.001 then return end
+    bone.position=(pa+pb)*0.5
+    bone.rotation=Q.FromToRotation(V3.up,delta.normalized)
+    bone.localScale=V3(1,len/0.070,1)
+end
+
+local function updateHandRig(side,rig)
+    if rig==nil then return end
+    local on=tracked(side)
+    rig.gameObject:SetActive(on)
+    if not on then return end
+
+    local prefix=side=="left" and "L" or "R"
+    for i=0,20 do
+        local p=handPoint(side,tostring(i))
+        local j=child(rig,prefix.."J"..string.format("%02d",i))
+        if p~=nil and j~=nil then j.position=p end
+    end
+    for i=1,#links do setBone(rig,prefix,links[i][1],links[i][2]) end
+
+    local palm=handPoint(side,"PalmCenter")
+    local rot=handRotation(side,"PalmCenter")
+    local plate=child(rig,prefix.."PalmPlate")
+    local anchor=child(rig,prefix.."GrabAnchor")
+    if plate~=nil then plate.position=palm;plate.rotation=rot end
+    if anchor~=nil then anchor.position=palm;anchor.rotation=rot end
+end
+
+local function isLooseWeapon(go)
+    for i=1,#weapons do if weapons[i]==go then return true end end
+    return false
+end
+
+local function addLooseWeapon(go)
+    if go~=nil and not isLooseWeapon(go) then table.insert(weapons,go) end
+end
+
+local function heldByPlayer(go)
+    return hands.left.holding==go or hands.right.holding==go
+end
+
+local function nearestWeapon(pos,maxDistance)
+    local best=nil
+    local bestD=maxDistance
+    for i=1,#weapons do
+        local w=weapons[i]
+        if w~=nil and w.activeInHierarchy and not heldByPlayer(w) then
+            local d=distance(pos,w.transform.position)
+            if d<bestD then best=w;bestD=d end
+        end
+    end
+    for i=1,#enemies do
+        local e=enemies[i]
+        if e.active and not e.dead and e.weapon~=nil and e.weapon.activeInHierarchy then
+            local d=distance(pos,e.weapon.transform.position)
+            if d<bestD then best=e.weapon;bestD=d end
+        end
+    end
+    return best
+end
+
+local function detachEnemyWeapon(w)
+    for i=1,#enemies do
+        local e=enemies[i]
+        if e.weapon==w then e.weapon=nil;addLooseWeapon(w);return end
+    end
+end
+
+local function grabWeapon(side,pos)
+    local state=hands[side]
+    if state.holding~=nil then return end
+    local w=nearestWeapon(pos,0.21)
+    if w==nil then return end
+    detachEnemyWeapon(w)
+    local anchor=side=="left" and leftGrab or rightGrab
+    if anchor==nil then return end
+    local r=getRb(w)
+    if r~=nil then r.isKinematic=true;r.velocity=V3.zero;r.angularVelocity=V3.zero end
+    w.transform:SetParent(anchor,false)
+    w.transform.localPosition=V3.zero
+    w.transform.localRotation=Q.identity
+    state.holding=w
+    interactionCount=interactionCount+1
+end
+
+local function releaseWeapon(side)
+    local state=hands[side]
+    local w=state.holding
+    if w==nil then return end
+    w.transform:SetParent(world,true)
+    local r=getRb(w)
+    if r~=nil then
+        r.isKinematic=false
+        r.velocity=state.velocity*1.18
+        r.angularVelocity=V3.Cross(V3.up,state.velocity)*2.2
+    end
+    state.holding=nil
+end
+
+local function setRagdoll(e,on)
+    e.ragdoll=on
+    for i=1,#e.parts do
+        local r=getRb(e.parts[i])
+        if r~=nil then r.isKinematic=not on end
+    end
+end
+
+local function restorePose(e)
+    setRagdoll(e,false)
+    for i=1,#e.parts do
+        local t=e.parts[i].transform
+        local pose=e.pose[i]
+        t.localPosition=pose.pos
+        t.localRotation=pose.rot
+        local r=getRb(e.parts[i])
+        if r~=nil then r.velocity=V3.zero;r.angularVelocity=V3.zero end
+    end
+end
+
+local function emitShard(pos,velocity)
+    if fxRoot==nil then return end
+    for i=0,fxRoot.childCount-1 do
+        local shard=fxRoot:GetChild(i).gameObject
+        if not shard.activeSelf then
+            shard:SetActive(true)
+            shard.transform.position=pos
+            shard.transform.rotation=Q.Euler(EMRAPI.Math:Random(0,360),EMRAPI.Math:Random(0,360),EMRAPI.Math:Random(0,360))
+            local r=getRb(shard)
+            if r~=nil then
+                r.isKinematic=false
+                r.velocity=velocity+V3(EMRAPI.Math:Random(-1,1),EMRAPI.Math:Random(.2,1.1),EMRAPI.Math:Random(-1,1))
+                r.angularVelocity=V3(EMRAPI.Math:Random(-5,5),EMRAPI.Math:Random(-5,5),EMRAPI.Math:Random(-5,5))
+            end
+            EMRAPI.Timer:Delay(.65,function()
+                if shard~=nil then local rr=getRb(shard);if rr~=nil then rr.isKinematic=true end;shard:SetActive(false) end
+            end)
+            return
+        end
+    end
+end
+
+local function enemyCanRearm(e)
+    if e.nativeWeapon==nil or heldByPlayer(e.nativeWeapon) then return false end
+    return true
+end
+
+local function rearmEnemy(e)
+    if e.weapon~=nil then return end
+    if not enemyCanRearm(e) then return end
+    local w=e.nativeWeapon
+    local wr=getRb(w);if wr~=nil then wr.isKinematic=true;wr.velocity=V3.zero;wr.angularVelocity=V3.zero end
+    w.transform:SetParent(e.weaponAnchor,false)
+    w.transform.localPosition=V3.zero
+    w.transform.localRotation=Q.identity
+    e.weapon=w
+end
+
+local function spawnEnemy(e)
+    restorePose(e)
+    local hp=headPosition()
+    local angle=EMRAPI.Math:Random(0,6.28318)
+    local radius=EMRAPI.Math:Random(2.0,3.15)
+    local p=V3(hp.x+math.sin(angle)*radius,floorY,hp.z+math.cos(angle)*radius)
+    e.root.transform.position=p
+    local look=hp-p;look.y=0
+    if look.sqrMagnitude>.001 then e.root.transform.rotation=Q.LookRotation(look.normalized,V3.up) end
+    e.health=100;e.dead=false;e.active=true;e.ragdoll=false;e.downTime=0
+    rearmEnemy(e)
+    e.root:SetActive(true)
+end
+
+local function killEnemy(e)
+    if e.dead then return end
+    e.dead=true;e.active=false
+    setRagdoll(e,true)
+    if e.weapon~=nil then
+        local w=e.weapon;e.weapon=nil
+        w.transform:SetParent(world,true);addLooseWeapon(w)
+        local r=getRb(w);if r~=nil then r.isKinematic=false end
+    end
+    EMRAPI.Timer:Delay(2.4,function()
+        if e.root~=nil then e.root:SetActive(false);e.dead=false;e.active=false end
+    end)
+end
+
+local function hitEnemy(e,part,velocity,mass)
+    if e.dead then return end
+    local speed=velocity.magnitude
+    if speed<0.72 then return end
+    local energy=speed*(mass or 1)
+    e.health=e.health-Mathf.Clamp(energy*14,7,65)
+    setRagdoll(e,true)
+    e.downTime=0
+    local r=getRb(part)
+    if r~=nil then r.velocity=r.velocity+velocity*(1.7+Mathf.Min(mass or 1,3)*.55) end
+    emitShard(part.transform.position,velocity*.18)
+    interactionCount=interactionCount+1
+    if e.health<=0 or energy>4.6 then killEnemy(e) end
+end
+
+local function checkPalmHit(side)
+    local state=hands[side]
+    if state.velocity.magnitude<0.72 or Time.time-state.lastHit<.11 then return end
+    local palm=handPoint(side,"PalmCenter")
+    if palm==nil then return end
+    for i=1,#enemies do
+        local e=enemies[i]
+        if e.active and not e.dead then
+            for j=1,#e.parts do
+                local part=e.parts[j]
+                if distance(palm,part.transform.position)<.18 then
+                    state.lastHit=Time.time
+                    hitEnemy(e,part,state.velocity,.86)
+                    return
+                end
+            end
+        end
+    end
+end
+
+local function strikePosition(w)
+    local names={"Blade","AxeHead","HammerHead","SpearPoint","ShieldFace"}
+    for i=1,#names do
+        local t=child(w.transform,names[i])
+        if t~=nil then
+            if names[i]=="Blade" then return t.position+t.up*.30 end
+            return t.position
+        end
+    end
+    return w.transform.position
+end
+
+local function checkWeaponHit(side)
+    local state=hands[side]
+    local w=state.holding
+    if w==nil then return end
+    local now=strikePosition(w)
+    local key=w.name..side
+    local prev=weaponPrev[key]
+    weaponPrev[key]=now
+    if prev==nil then return end
+    local vel=(now-prev)/Mathf.Max(Time.deltaTime,.008)
+    if vel.magnitude<.90 then return end
+    local wr=getRb(w);local mass=wr~=nil and wr.mass or 1
+    for i=1,#enemies do
+        local e=enemies[i]
+        if e.active and not e.dead then
+            for j=1,#e.parts do
+                local part=e.parts[j]
+                if distance(now,part.transform.position)<.23 then
+                    hitEnemy(e,part,vel,mass)
+                    weaponPrev[key]=nil
+                    return
+                end
+            end
+        end
+    end
+end
+
+local function initWeapons()
+    for i=0,weaponsRoot.childCount-1 do
+        local go=weaponsRoot:GetChild(i).gameObject
+        if string.find(go.name,"ArrowPool_")~=nil then table.insert(arrows,go) else table.insert(weapons,go) end
+    end
+end
+
+local function initEnemies()
+    for i=0,enemiesRoot.childCount-1 do
+        local go=enemiesRoot:GetChild(i).gameObject
+        local e={root=go,parts={},pose={},health=100,dead=false,active=false,ragdoll=false,downTime=0,weapon=nil,nativeWeapon=nil,weaponAnchor=nil}
+        for j=1,#bodyNames do
+            local t=child(go.transform,bodyNames[j])
+            if t~=nil then
+                table.insert(e.parts,t.gameObject)
+                table.insert(e.pose,{pos=t.localPosition,rot=t.localRotation})
+            end
+        end
+        local lower=child(go.transform,"LowerArm_R")
+        if lower~=nil then
+            local anchor=child(lower,"WeaponAnchor")
+            e.weaponAnchor=anchor
+            if anchor~=nil then
+                local sw=child(anchor,"EnemySword")
+                if sw~=nil then e.weapon=sw.gameObject;e.nativeWeapon=sw.gameObject end
+            end
+        end
+        table.insert(enemies,e)
+    end
+end
+
+local function placeWeapons()
+    local hp=headPosition();floorY=hp.y-1.42
+    local rot=headRotation();local forward=rot*V3.forward;forward.y=0
+    if forward.sqrMagnitude<.01 then forward=V3.forward else forward=forward.normalized end
+    local right=V3.Cross(V3.up,forward).normalized
+    local slots={
+        forward*1.00-right*.90,forward*1.00-right*.58,forward*1.00-right*.25,
+        forward*1.00+right*.25,forward*1.00+right*.58,forward*1.00+right*.90,
+        forward*.70+right*1.16
+    }
+    for i=1,#weapons do
+        local w=weapons[i];local off=slots[((i-1)%#slots)+1]
+        w.transform.position=V3(hp.x+off.x,floorY+.72+(i%2)*.16,hp.z+off.z)
+        w.transform.rotation=Q.Euler(0,i*23,12)
+        local r=getRb(w);if r~=nil then r.isKinematic=false end
+    end
+end
+
+local function freeArrow()
+    for i=1,#arrows do if not arrows[i].activeSelf then return arrows[i] end end
+    return nil
+end
+
+local function resetBowString(bow)
+    local s=child(bow.transform,"String")
+    if s~=nil then local lr=s.gameObject:GetComponent("LineRenderer");if lr~=nil then lr:SetPosition(1,V3.zero) end end
+end
+
+local function updateBow(side)
+    local state=hands[side]
+    local bow=state.holding
+    if bow==nil or bow.name~="Bow_01" then return end
+    local other=side=="left" and "right" or "left"
+    local finger=handPoint(other,"IndexTip")
+    if finger==nil then return end
+    local p=isPinching(other)
+
+    if not bowDraw.active and p and distance(finger,bow.transform.position)<.34 then
+        bowDraw.active=true;bowDraw.owner=side;bowDraw.drawHand=other;bowDraw.arrow=freeArrow();bowDraw.amount=0
+        if bowDraw.arrow~=nil then bowDraw.arrow:SetActive(true);bowDraw.arrow.transform:SetParent(bow.transform,true) end
+    end
+
+    if bowDraw.active and bowDraw.owner==side then
+        local amount=Mathf.Clamp((distance(finger,bow.transform.position)-.07)/.42,0,1)
+        bowDraw.amount=amount
+        local stringT=child(bow.transform,"String")
+        if stringT~=nil then
+            local lr=stringT.gameObject:GetComponent("LineRenderer")
+            if lr~=nil then lr:SetPosition(1,V3(0,0,-.32*amount)) end
+        end
+        local a=bowDraw.arrow
+        if a~=nil then
+            a.transform.position=bow.transform.position-bow.transform.forward*(.08+.30*amount)
+            a.transform.rotation=Q.FromToRotation(V3.up,bow.transform.forward)
+        end
+        if not p then
+            if a~=nil then
+                a.transform:SetParent(world,true)
+                local ar=getRb(a);if ar~=nil then ar.isKinematic=false;ar.velocity=bow.transform.forward*(4+18*amount);ar.angularVelocity=V3.zero end
+            end
+            resetBowString(bow)
+            bowDraw.active=false;bowDraw.owner=nil;bowDraw.drawHand=nil;bowDraw.arrow=nil;bowDraw.amount=0
+        end
+    end
+end
+
+local function updateArrows()
+    for i=1,#arrows do
+        local a=arrows[i]
+        if a.activeSelf then
+            local r=getRb(a)
+            if r~=nil and not r.isKinematic and r.velocity.magnitude>.6 then
+                for j=1,#enemies do
+                    local e=enemies[j]
+                    if e.active and not e.dead then
+                        for k=1,#e.parts do
+                            local part=e.parts[k]
+                            if distance(a.transform.position,part.transform.position)<.13 then
+                                local impact=r.velocity
+                                hitEnemy(e,part,impact,.65)
+                                r.isKinematic=true;r.velocity=V3.zero
+                                a.transform:SetParent(part.transform,true)
+                                EMRAPI.Timer:Delay(4.5,function() if a~=nil then a.transform:SetParent(world,true);a:SetActive(false) end end)
+                                return
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function updateEnemy(e,dt,index)
+    if not e.active or e.dead then return end
+    if e.ragdoll then
+        e.downTime=e.downTime+dt
+        if e.downTime>2.1 and e.health>0 then
+            e.root:SetActive(false);e.active=false;e.ragdoll=false
+        end
+        return
+    end
+    local hp=headPosition();local p=e.root.transform.position
+    local delta=hp-p;delta.y=0;local d=delta.magnitude
+    if d>1.05 then e.root.transform.position=p+delta.normalized*(d>2.0 and .74 or .38)*dt end
+    if delta.sqrMagnitude>.01 then e.root.transform.rotation=Q.Slerp(e.root.transform.rotation,Q.LookRotation(delta.normalized,V3.up),dt*3.1) end
+    local arm=child(e.root.transform,"LowerArm_R")
+    if arm~=nil then arm.localRotation=Q.Euler(math.sin(Time.time*3.1+index)*42,0,-18) end
+end
+
+local function updateHand(side,dt)
+    local state=hands[side]
+    if not tracked(side) then
+        if state.holding~=nil then releaseWeapon(side) end
+        state.prevPalm=nil;state.prevPinch=false
+        return
+    end
+    local palm=handPoint(side,"PalmCenter")
+    if state.prevPalm~=nil then state.velocity=(palm-state.prevPalm)/Mathf.Max(dt,.008) end
+    state.prevPalm=palm
+    local p=isPinching(side)
+    if p and not state.prevPinch then grabWeapon(side,palm) end
+    if not p and state.prevPinch then releaseWeapon(side) end
+    state.prevPinch=p
+    checkPalmHit(side)
+    checkWeaponHit(side)
+    updateBow(side)
+end
+
+local function maintainPopulation()
+    local count=0
+    for i=1,#enemies do if enemies[i].active and not enemies[i].dead then count=count+1 end end
+    if count>=desiredEnemies then return end
+    for i=1,#enemies do
+        local e=enemies[i]
+        if not e.active and not e.dead then spawnEnemy(e);count=count+1;if count>=desiredEnemies then return end end
+    end
+end
+
+function start()
+    root=gameObject
+    world=child(root.transform,"WorldRoot")
+    handsRoot=child(root.transform,"Hands")
+    weaponsRoot=child(world,"Weapons")
+    enemiesRoot=child(world,"Enemies")
+    fxRoot=child(world,"FX")
+    leftRig=child(handsRoot,"LHandRig");rightRig=child(handsRoot,"RHandRig")
+    leftGrab=child(leftRig,"LGrabAnchor");rightGrab=child(rightRig,"RGrabAnchor")
+    initWeapons();initEnemies();placeWeapons()
+    interactionCount=EMRAPI.Storage:GetNumber("interactions",0)
+    for i=1,desiredEnemies do if enemies[i]~=nil then spawnEnemy(enemies[i]) end end
+    EMRAPI:Log("BREAKROOM MR: 6DoF head + 21-landmark hands started")
+end
+
+function update()
+    local dt=EMRAPI.System:GetDeltaTime()
+    updateHandRig("left",leftRig);updateHandRig("right",rightRig)
+    updateHand("left",dt);updateHand("right",dt)
+    for i=1,#enemies do updateEnemy(enemies[i],dt,i) end
+    updateArrows();maintainPopulation()
+end
+
+function onDestroy()
+    if hands.left.holding~=nil then releaseWeapon("left") end
+    if hands.right.holding~=nil then releaseWeapon("right") end
+    EMRAPI.Storage:SetNumber("interactions",interactionCount)
+    EMRAPI.Storage:Save()
+end
