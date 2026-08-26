@@ -14,13 +14,13 @@ targets:
     platform: iOS
     sources:
       - path: Sources/AppDelegate.swift
-      - path: Sources/FitnessGame.swift
+      - path: Sources/FitnessGameV2ViewController.swift
     info:
       path: Sources/Info.plist
       properties:
         CFBundleDisplayName: BREAKROOM Fitness MR
         UILaunchScreen: {}
-        NSCameraUsageDescription: BREAKROOM Fitness MR uses the camera for mixed reality and hand tracking.
+        NSCameraUsageDescription: BREAKROOM Fitness MR uses the camera for mixed reality and visible hand tracking.
         UIRequiredDeviceCapabilities:
           - arkit
         UISupportedInterfaceOrientations:
