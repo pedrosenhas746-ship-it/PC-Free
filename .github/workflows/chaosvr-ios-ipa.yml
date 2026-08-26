@@ -142,16 +142,16 @@ jobs:
           APP=$(find DerivedDataFitness/Build/Products/Release-iphoneos -maxdepth 1 -type d -name '*.app' | head -1)
           test -n "$APP"
           test -f "$APP/Info.plist"
-          rm -rf PayloadFitness
-          mkdir -p PayloadFitness
-          cp -R "$APP" PayloadFitness/BreakroomFitness.app
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' PayloadFitness/BreakroomFitness.app/Info.plist | tee breakroom-bundle-id.txt
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' PayloadFitness/BreakroomFitness.app/Info.plist | tee breakroom-executable.txt
-          test -f "PayloadFitness/BreakroomFitness.app/$(cat breakroom-executable.txt)"
-          cd PayloadFitness/..
-          ditto -c -k --sequesterRsrc --keepParent PayloadFitness BREAKROOM-FITNESS-MR-iPhone-UNSIGNED.ipa
+          rm -rf Payload
+          mkdir -p Payload
+          cp -R "$APP" Payload/BreakroomFitness.app
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' Payload/BreakroomFitness.app/Info.plist | tee breakroom-bundle-id.txt
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' Payload/BreakroomFitness.app/Info.plist | tee breakroom-executable.txt
+          test -f "Payload/BreakroomFitness.app/$(cat breakroom-executable.txt)"
+          ditto -c -k --sequesterRsrc --keepParent Payload BREAKROOM-FITNESS-MR-iPhone-UNSIGNED.ipa
           shasum -a 256 BREAKROOM-FITNESS-MR-iPhone-UNSIGNED.ipa | tee BREAKROOM-FITNESS-MR-iPhone-UNSIGNED.sha256
           unzip -t BREAKROOM-FITNESS-MR-iPhone-UNSIGNED.ipa
+          unzip -l BREAKROOM-FITNESS-MR-iPhone-UNSIGNED.ipa | grep 'Payload/BreakroomFitness.app/Info.plist'
 
       - name: Upload BREAKROOM Fitness IPA
         uses: actions/upload-artifact@v4
