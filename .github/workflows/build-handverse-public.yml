@@ -1,0 +1,66 @@
+name: Build Handverse iOS Public
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'HandverseBuild/**'
+      - '.github/workflows/build-handverse-public.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: HandverseBuild
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build unsigned app
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project HandverseLab.xcodeproj \
+            -scheme HandverseLab \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build | tee xcodebuild.log
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          APP="build/Build/Products/Release-iphoneos/HandverseLab.app"
+          test -d "$APP"
+          rm -rf Payload
+          mkdir Payload
+          cp -R "$APP" Payload/
+          /usr/bin/zip -qry HandverseLab-unsigned.ipa Payload
+          shasum -a 256 HandverseLab-unsigned.ipa > HandverseLab-unsigned.sha256
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HandverseLab-iOS
+          path: |
+            HandverseBuild/HandverseLab-unsigned.ipa
+            HandverseBuild/HandverseLab-unsigned.sha256
+            HandverseBuild/xcodebuild.log
+          if-no-files-found: error
