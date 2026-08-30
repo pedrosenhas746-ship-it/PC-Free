@@ -1,0 +1,38 @@
+name: HandverseLab
+options:
+  bundleIdPrefix: com.handverse
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    SWIFT_VERSION: 5.0
+    IPHONEOS_DEPLOYMENT_TARGET: 16.0
+    CODE_SIGN_STYLE: Automatic
+targets:
+  HandverseLab:
+    type: application
+    platform: iOS
+    sources:
+      - HandverseLab
+    info:
+      path: HandverseLab/Info.plist
+      properties:
+        CFBundleDisplayName: Handverse Lab
+        CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
+        CFBundleName: $(PRODUCT_NAME)
+        CFBundlePackageType: APPL
+        CFBundleShortVersionString: "0.2"
+        CFBundleVersion: "2"
+        NSCameraUsageDescription: Handverse Lab usa a câmera para rastrear suas mãos e permitir interação física.
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIRequiresFullScreen: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.handverse.lab
+        PRODUCT_NAME: HandverseLab
+        TARGETED_DEVICE_FAMILY: "1"
+    scheme:
+      testTargets: []
