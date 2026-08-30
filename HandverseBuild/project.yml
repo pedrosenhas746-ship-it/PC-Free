@@ -1,0 +1,25 @@
+name: HandverseLab
+options:
+  bundleIdPrefix: com.handverse
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    SWIFT_VERSION: 5.0
+    TARGETED_DEVICE_FAMILY: "1"
+    IPHONEOS_DEPLOYMENT_TARGET: 16.0
+    CODE_SIGN_STYLE: Automatic
+targets:
+  HandverseLab:
+    type: application
+    platform: iOS
+    sources:
+      - HandverseLab
+    info:
+      path: HandverseLab/Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.handverse.lab
+        PRODUCT_NAME: HandverseLab
+    scheme:
+      testTargets: []
